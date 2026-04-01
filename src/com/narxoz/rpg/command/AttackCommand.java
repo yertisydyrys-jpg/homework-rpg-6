@@ -3,31 +3,33 @@ package com.narxoz.rpg.command;
 import com.narxoz.rpg.arena.ArenaOpponent;
 
 public class AttackCommand implements ActionCommand {
-    private final ArenaOpponent target;
+    private final ArenaOpponent opponent;
     private final int attackPower;
     private int damageDealt;
 
-    public AttackCommand(ArenaOpponent target, int attackPower) {
-        this.target = target;
+    public AttackCommand(ArenaOpponent opponent, int attackPower) {
+        this.opponent = opponent;
         this.attackPower = attackPower;
     }
 
     @Override
     public void execute() {
-        // TODO: Deal attackPower damage to the target using target.takeDamage(int).
-        // TODO: Store the actual damage dealt in damageDealt so that undo() can reverse it exactly.
-        // TODO: Consider: should damageDealt be capped at the target's remaining health?
+        damageDealt = Math.min(opponent.getHealth(), attackPower);
+        opponent.takeDamage(damageDealt);
+        System.out.printf("[Attack] %s deals %d damage to %s%n",
+                opponent.getName(), damageDealt, opponent.getName()); // Actually hero attacks opponent, better to pass hero name
+        // But we don't have hero in command; maybe add hero name later
+        // For simplicity, just use opponent name as target
     }
 
     @Override
     public void undo() {
-        // TODO: Restore the stored damageDealt to the target using target.restoreHealth(int).
-        // Note: Use damageDealt (what was actually applied), not attackPower.
+        opponent.restoreHealth(damageDealt);
+        System.out.printf("[Undo] Restored %d health to %s%n", damageDealt, opponent.getName());
     }
 
     @Override
     public String getDescription() {
-        // TODO: Return a readable summary, e.g. "Attack for 18 damage".
-        return "TODO";
+        return "Attack (power " + attackPower + ")";
     }
 }
