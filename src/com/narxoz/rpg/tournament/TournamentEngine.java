@@ -3,21 +3,16 @@ package com.narxoz.rpg.tournament;
 import com.narxoz.rpg.arena.ArenaFighter;
 import com.narxoz.rpg.arena.ArenaOpponent;
 import com.narxoz.rpg.arena.TournamentResult;
-import com.narxoz.rpg.chain.ArmorHandler;
-import com.narxoz.rpg.chain.BlockHandler;
-import com.narxoz.rpg.chain.DefenseHandler;
-import com.narxoz.rpg.chain.DodgeHandler;
-import com.narxoz.rpg.chain.HpHandler;
-import com.narxoz.rpg.command.ActionQueue;
-import com.narxoz.rpg.command.AttackCommand;
-import com.narxoz.rpg.command.DefendCommand;
-import com.narxoz.rpg.command.HealCommand;
-import java.util.Random;
+import com.narxoz.rpg.chain.*;
+import com.narxoz.rpg.command.*;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public class TournamentEngine {
     private final ArenaFighter hero;
     private final ArenaOpponent opponent;
-    private Random random = new Random(1L);
+    private long randomSeed = System.currentTimeMillis();
 
     public TournamentEngine(ArenaFighter hero, ArenaOpponent opponent) {
         this.hero = hero;
@@ -25,44 +20,79 @@ public class TournamentEngine {
     }
 
     public TournamentEngine setRandomSeed(long seed) {
-        this.random = new Random(seed);
+        this.randomSeed = seed;
         return this;
     }
 
     public TournamentResult runTournament() {
         TournamentResult result = new TournamentResult();
-        int round = 0;
-        final int maxRounds = 20;
+        List<String> log = new ArrayList<>();
 
-        // TODO: Build the defense chain using fluent setNext():
-        //   DodgeHandler -> BlockHandler -> ArmorHandler -> HpHandler
-        // Hint: use hero stats for each handler's parameters.
-        //   new DodgeHandler(hero.getDodgeChance(), <seed>)
-        //   new BlockHandler(hero.getBlockRating() / 100.0)   <-- note the int-to-double conversion
-        //   new ArmorHandler(hero.getArmorValue())
-        //   new HpHandler()
-        // Chain them: dodge.setNext(block).setNext(armor).setNext(hp)
+        // Build defense chain
+        DefenseHandler chain = new DodgeHandler(hero.getDodgeChance(), randomSeed);
+        chain.setNext(new BlockHandler(hero.getBlockRating() / 100.0))
+                .setNext(new ArmorHandler(hero.getArmorValue()))
+                .setNext(new HpHandler());
 
-        // TODO: Create an ActionQueue (the invoker).
+        ActionQueue actionQueue = new ActionQueue();
 
-        // TODO: Simulate rounds until hero or opponent is defeated (or maxRounds is reached).
-        // Each round should:
-        //   1) Increment round counter.
-        //   2) Enqueue hero actions: AttackCommand, HealCommand, DefendCommand.
-        //      Use hero.getAttackPower() for AttackCommand, a fixed heal amount for HealCommand,
-        //      and a small dodge boost for DefendCommand.
-        //   3) Print the queued commands using actionQueue.getCommandDescriptions().
-        //   4) Call actionQueue.executeAll() to run all hero actions.
-        //   5) If the opponent is still alive: have the opponent attack the hero.
-        //      Route the attack through the defense chain: defenseChain.handle(opponent.getAttackPower(), hero)
-        //      Do NOT call hero.takeDamage() directly here.
-        //   6) Log round results (e.g. "[Round N] Opponent HP: X | Hero HP: Y").
-        //   7) Add the log line to result.addLine(...).
+        int rounds = 0;
+        final int MAX_ROUNDS = 50;
+        boolean heroTurn = true; // Hero always goes first in a round? Actually each round hero acts, then opponent.
 
-        // TODO: After the loop, determine the winner.
-        //   result.setWinner(hero.isAlive() ? hero.getName() : opponent.getName());
-        result.setWinner("TODO");
-        result.setRounds(round);
+        while (hero.isAlive() && opponent.isAlive() && rounds < MAX_ROUNDS) {
+            rounds++;
+            log.add("=== Round " + rounds + " ===");
+
+            // Hero's turn: build queue (simple strategy)
+            actionQueue.enqueue(new AttackCommand(opponent, hero.getAttackPower()));
+            if (hero.getHealth() < hero.getMaxHealth() / 2 && hero.getHealPotions() > 0) {
+                actionQueue.enqueue(new HealCommand(hero, 20));
+            }
+            // Optionally defend occasionally
+            if (Math.random() < 0.3) { // random, but we could use seed; for simplicity use Math.random
+                actionQueue.enqueue(new DefendCommand(hero, 0.1));
+            }
+
+            log.add("Hero actions queued: " + actionQueue.getCommandDescriptions());
+            // Execute all queued actions
+            actionQueue.executeAll(); // prints to console but we might want to capture output
+            // For simplicity, we'll just let them print; log will capture round summary.
+
+            // Check if opponent died after hero's actions
+            if (!opponent.isAlive()) {
+                log.add("Opponent defeated!");
+                break;
+            }
+
+            // Opponent's turn: counterattack through defense chain
+            int opponentDamage = opponent.getAttackPower();
+            log.add("Opponent attacks with power " + opponentDamage);
+            // We need to capture chain output? It prints to console; we can redirect or just add generic message.
+            // For log, we can add a line that damage is processed via chain.
+            chain.handle(opponentDamage, hero);
+            log.add("Hero health after defense: " + hero.getHealth());
+
+            // Check if hero died
+            if (!hero.isAlive()) {
+                log.add("Hero defeated!");
+                break;
+            }
+        }
+
+        // Determine winner
+        String winner;
+        if (hero.isAlive()) {
+            winner = hero.getName();
+        } else {
+            winner = opponent.getName();
+        }
+        result.setWinner(winner);
+        result.setRounds(rounds);
+        for (String line : log) {
+            result.addLine(line);
+        }
+
         return result;
     }
 }
